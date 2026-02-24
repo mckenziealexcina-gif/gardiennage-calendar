@@ -1,44 +1,30 @@
+/* eslint-disable */
 import { PrismaClient } from "@prisma/client";
 
-/* eslint-disable */
-let _prisma: any;
+declare global {
+  // eslint-disable-next-line no-var
+  var prismaGlobal: PrismaClient | undefined;
+}
 
-function getPrisma(): PrismaClient {
-  if (_prisma) return _prisma;
-
+function buildClient(): PrismaClient {
   const url = process.env.DATABASE_URL ?? "";
 
   if (url.startsWith("libsql://") || url.startsWith("https://")) {
-    // Loaded lazily so the module isn't evaluated at build time
-    const { PrismaLibSql } = require("@prisma/adapter-libsql");
+    const { PrismaLibSql } = require("@prisma/adapter-libsql") as {
+      PrismaLibSql: new (config: { url: string; authToken?: string }) => object;
+    };
     const adapter = new PrismaLibSql({
       url,
       authToken: process.env.DATABASE_AUTH_TOKEN,
     });
-    _prisma = new PrismaClient({ adapter });
-  } else {
-    _prisma = new PrismaClient({
-      log:
-        process.env.NODE_ENV === "development"
-          ? ["query", "error", "warn"]
-          : ["error"],
-    });
+    return new PrismaClient({ adapter } as never);
   }
 
-  return _prisma;
+  return new PrismaClient({
+    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+  });
 }
-/* eslint-enable */
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+export const prisma = global.prismaGlobal ?? buildClient();
 
-export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
-  get(_target, prop) {
-    const client = globalForPrisma.prisma ?? getPrisma();
-    if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
-    // eslint-disable-next-line
-    const value = (client as any)[prop];
-    return typeof value === "function" ? value.bind(client) : value;
-  },
-});
+if (process.env.NODE_ENV !== "production") global.prismaGlobal = prisma;
