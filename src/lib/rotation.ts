@@ -3,15 +3,14 @@ import { frCA } from 'date-fns/locale';
 
 export interface User {
   name: string;
-  email: string; // Phone-to-email gateway
+  phone: string; // E.164 format: +1XXXXXXXXXX
 }
 
-// NOTE: Replace with actual phone-to-email gateways
 export const USERS: User[] = [
-  { name: 'Alex',   email: '5817457623@vmobile.ca' },       // Vidéotron
-  { name: 'Joey',   email: '5819903681@txt.bell.ca' },      // Bell
-  { name: 'Elo',    email: '4182646318@vmobile.ca' },       // Vidéotron
-  { name: 'Nathan', email: '5813099142@vmsg.ca' },          // Virgin Mobile
+  { name: 'Alex',   phone: '+15817457623' },
+  { name: 'Joey',   phone: '+15819903681' },
+  { name: 'Elo',    phone: '+14182646318' },
+  { name: 'Nathan', phone: '+15813099142' },
 ];
 
 // The anchor date for the rotation calculation.

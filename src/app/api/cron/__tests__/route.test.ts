@@ -1,24 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// vi.mock is hoisted — define everything inside the factory
-vi.mock('resend', () => {
-  const send = vi.fn().mockResolvedValue({ id: 'mock-email-id' });
+vi.mock('twilio', () => {
+  const create = vi.fn().mockResolvedValue({ sid: 'SM_mock_sid' });
+  const client = { messages: { create } };
   return {
-    Resend: class {
-      emails = { send };
-      static _send = send; // expose for test access
-    },
+    default: Object.assign(vi.fn().mockReturnValue(client), { _create: create }),
   };
 });
 
 import { GET } from '../route';
-import { Resend } from 'resend';
+import twilio from 'twilio';
 
 const VALID_SECRET = 'test-secret-123';
 
-// Access the shared mock function via the static property
-function getMockSend() {
-  return (Resend as unknown as { _send: ReturnType<typeof vi.fn> })._send;
+function getMockCreate() {
+  return (twilio as unknown as { _create: ReturnType<typeof vi.fn> })._create;
 }
 
 function makeRequest(secret?: string): Request {
@@ -31,66 +27,58 @@ function makeRequest(secret?: string): Request {
 describe("Tests d'intégration — GET /api/cron", () => {
   beforeEach(() => {
     process.env.CRON_SECRET = VALID_SECRET;
-    process.env.RESEND_API_KEY = 're_test_key';
-    getMockSend().mockClear();
-    getMockSend().mockResolvedValue({ id: 'mock-email-id' });
+    process.env.TWILIO_ACCOUNT_SID = 'AC_test';
+    process.env.TWILIO_AUTH_TOKEN = 'token_test';
+    process.env.TWILIO_PHONE_NUMBER = '+15140000000';
+    getMockCreate().mockClear();
+    getMockCreate().mockResolvedValue({ sid: 'SM_mock_sid' });
   });
 
   afterEach(() => {
     delete process.env.CRON_SECRET;
-    delete process.env.RESEND_API_KEY;
+    delete process.env.TWILIO_ACCOUNT_SID;
+    delete process.env.TWILIO_AUTH_TOKEN;
+    delete process.env.TWILIO_PHONE_NUMBER;
   });
 
   it('retourne 401 si cron_secret absent', async () => {
-    const req = makeRequest();
-    const res = await GET(req);
+    const res = await GET(makeRequest());
     expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.message).toBe('Unauthorized');
+    expect((await res.json()).message).toBe('Unauthorized');
   });
 
   it('retourne 401 si cron_secret incorrect', async () => {
-    const req = makeRequest('mauvais-secret');
-    const res = await GET(req);
+    const res = await GET(makeRequest('mauvais-secret'));
     expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.message).toBe('Unauthorized');
+    expect((await res.json()).message).toBe('Unauthorized');
   });
 
-  it('retourne 200 avec le bon secret et appelle Resend', async () => {
-    const req = makeRequest(VALID_SECRET);
-    const res = await GET(req);
+  it('retourne 200 avec le bon secret', async () => {
+    const res = await GET(makeRequest(VALID_SECRET));
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.message).toMatch(/Reminder sent to/);
+    expect((await res.json()).message).toMatch(/SMS sent to/);
   });
 
-  it('le message de succès contient le nom du gardien actuel', async () => {
-    const req = makeRequest(VALID_SECRET);
-    const res = await GET(req);
+  it('le message contient un nom valide', async () => {
+    const res = await GET(makeRequest(VALID_SECRET));
     const body = await res.json();
     const validNames = ['Alex', 'Joey', 'Elo', 'Nathan'];
-    const hasValidName = validNames.some((name) => body.message.includes(name));
-    expect(hasValidName).toBe(true);
+    expect(validNames.some((n) => body.message.includes(n))).toBe(true);
   });
 
-  it('Resend.emails.send est bien appelé avec les bons paramètres', async () => {
-    const req = makeRequest(VALID_SECRET);
-    await GET(req);
-    expect(getMockSend()).toHaveBeenCalledOnce();
-    const callArgs = getMockSend().mock.calls[0][0];
-    expect(callArgs).toMatchObject({
-      subject: 'Rappel Gardiennage',
-      text: "C'est ton tour ce weekend!",
-    });
+  it('twilio.messages.create est appelé avec les bons params', async () => {
+    await GET(makeRequest(VALID_SECRET));
+    expect(getMockCreate()).toHaveBeenCalledOnce();
+    const args = getMockCreate().mock.calls[0][0];
+    expect(args.from).toBe('+15140000000');
+    expect(args.to).toMatch(/^\+1\d{10}$/);
+    expect(args.body).toContain("c'est ton tour");
   });
 
-  it('retourne 500 si Resend lève une erreur', async () => {
-    getMockSend().mockRejectedValueOnce(new Error('Resend API down'));
-    const req = makeRequest(VALID_SECRET);
-    const res = await GET(req);
+  it('retourne 500 si Twilio lève une erreur', async () => {
+    getMockCreate().mockRejectedValueOnce(new Error('Twilio down'));
+    const res = await GET(makeRequest(VALID_SECRET));
     expect(res.status).toBe(500);
-    const body = await res.json();
-    expect(body.message).toBe('Error sending reminder');
+    expect((await res.json()).message).toBe('Error sending SMS');
   });
 });

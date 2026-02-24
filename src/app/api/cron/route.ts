@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import { Resend } from 'resend';
+import twilio from 'twilio';
 import { getCurrentGuardian } from '@/lib/rotation';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -15,20 +13,24 @@ export async function GET(request: Request) {
   try {
     const guardian = getCurrentGuardian();
 
-    await resend.emails.send({
-      from: 'onboarding@resend.dev', // A default verified sender
-      to: guardian.email,
-      subject: 'Rappel Gardiennage',
-      text: "C'est ton tour ce weekend!",
+    const client = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+
+    await client.messages.create({
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: guardian.phone,
+      body: `Salut ${guardian.name}, c'est ton tour de gardiennage ce weekend!`,
     });
 
     return NextResponse.json({
-      message: `Reminder sent to ${guardian.name}`,
+      message: `SMS sent to ${guardian.name}`,
     });
   } catch (error) {
     console.error('Cron job error:', error);
     return NextResponse.json(
-      { message: 'Error sending reminder' },
+      { message: 'Error sending SMS' },
       { status: 500 }
     );
   }
