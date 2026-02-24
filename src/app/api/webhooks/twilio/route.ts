@@ -55,26 +55,23 @@ export async function POST(request: Request) {
 
   // Gardien répond NON → déclenche urgence immédiate
   if (isGuardian && rawBody === 'NON') {
-    await setWeekendState(satDate, { ...state, status: 'declined' });
-
     const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const others = USERS.filter((u) => u.phone !== state.guardianPhone);
 
-    await Promise.all(
-      others.map((u) =>
+    await Promise.all([
+      ...others.map((u) =>
         client.messages.create({
           from: process.env.TWILIO_PHONE_NUMBER,
           to: u.phone,
           body: `URGENT: ${state.guardian} ne peut pas faire la garde ce weekend. Réponds OUI si tu peux le/la remplacer.`,
         })
-      )
-    );
-
-    await setWeekendState(satDate, {
-      ...state,
-      status: 'urgent',
-      urgentSentAt: now.toISOString(),
-    });
+      ),
+      setWeekendState(satDate, {
+        ...state,
+        status: 'urgent',
+        urgentSentAt: now.toISOString(),
+      }),
+    ]);
 
     return twiml(`Compris ${state.guardian}, on cherche un remplaçant.`);
   }
