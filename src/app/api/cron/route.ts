@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import twilio from 'twilio';
-import { getCurrentGuardian } from '@/lib/rotation';
-import { getSaturdayKey, setWeekendState } from '@/lib/kv';
-import { format, nextSaturday, isSaturday } from 'date-fns';
+import { getSaturdayKey, createWeekendEvent, getWeekendState, USERS } from '@/lib/google';
+import { format, nextFriday, isFriday } from 'date-fns';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -13,11 +12,31 @@ export async function GET(request: Request) {
   }
 
   try {
-    const guardian = getCurrentGuardian();
     const now = new Date();
-    const sat = isSaturday(now) ? now : nextSaturday(now);
-    const satDate = format(sat, 'yyyy-MM-dd');
+    const satDate = getSaturdayKey(now);
 
+    // Vérifier si l'event existe déjà dans GCal pour ce weekend
+    const existing = await getWeekendState(satDate);
+    if (existing) {
+      return NextResponse.json({
+        message: `Event déjà créé pour ${satDate} (${existing.guardian}, status: ${existing.status})`,
+      });
+    }
+
+    // Calculer le gardien selon la rotation pure (vendredi = samedi-1)
+    // On utilise USERS avec rotation basée sur la semaine courante
+    const startDate = new Date(process.env.START_DATE ?? '2026-02-27');
+    const fridayDate = isFriday(now) ? now : nextFriday(now);
+    const weekIndex = Math.round(
+      (fridayDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)
+    );
+    const userIndex = ((weekIndex % 4) + 4) % 4;
+    const guardian = USERS[userIndex];
+
+    // Créer l'event dans Google Calendar
+    const state = await createWeekendEvent(satDate, guardian.name);
+
+    // Envoyer le SMS via Twilio
     const client = twilio(
       process.env.TWILIO_ACCOUNT_SID,
       process.env.TWILIO_AUTH_TOKEN
@@ -29,25 +48,14 @@ export async function GET(request: Request) {
       body: `Salut ${guardian.name}, c'est ton tour de gardiennage ce weekend! Réponds OUI ou NON.`,
     });
 
-    try {
-      await setWeekendState(satDate, {
-        weekendDate: satDate,
-        guardian: guardian.name,
-        guardianPhone: guardian.phone,
-        status: 'pending',
-        sentAt: now.toISOString(),
-      });
-    } catch (kvErr) {
-      console.warn('KV unavailable, state not saved:', kvErr);
-    }
-
     return NextResponse.json({
-      message: `SMS sent to ${guardian.name}`,
+      message: `SMS sent to ${guardian.name}, event créé dans Google Calendar`,
+      eventId: state.eventId,
     });
   } catch (error) {
     console.error('Cron job error:', error);
     return NextResponse.json(
-      { message: 'Error sending SMS' },
+      { message: 'Error', error: String(error) },
       { status: 500 }
     );
   }

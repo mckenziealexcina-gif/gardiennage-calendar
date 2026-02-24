@@ -1,7 +1,5 @@
 import twilio from 'twilio';
-import { USERS } from '@/lib/rotation';
-import { getWeekendState, setWeekendState } from '@/lib/kv';
-import { format, nextSaturday, isSaturday } from 'date-fns';
+import { USERS, getWeekendState, setWeekendState, getSaturdayKey } from '@/lib/google';
 
 export const runtime = 'nodejs';
 
@@ -33,9 +31,7 @@ export async function POST(request: Request) {
   const rawBody: string = (params['Body'] ?? '').trim().toUpperCase();
   const sender = USERS.find((u) => u.phone === from);
 
-  const now = new Date();
-  const sat = isSaturday(now) ? now : nextSaturday(now);
-  const satDate = format(sat, 'yyyy-MM-dd');
+  const satDate = getSaturdayKey();
   const state = await getWeekendState(satDate);
 
   if (!state) {
@@ -44,38 +40,35 @@ export async function POST(request: Request) {
 
   const isGuardian = sender?.phone === state.guardianPhone;
 
-  // Gardien répond OUI
+  // Gardien répond OUI → confirmer dans GCal
   if (isGuardian && rawBody === 'OUI') {
     await setWeekendState(satDate, { ...state, status: 'confirmed' });
     return twiml(`Parfait, merci ${state.guardian}! On compte sur toi ce weekend.`);
   }
 
-  // Gardien répond NON → répondre immédiatement, envoyer SMS en arrière-plan
+  // Gardien répond NON → urgence immédiate + maj GCal
   if (isGuardian && rawBody === 'NON') {
-    const stateCopy = { ...state };
-    const satDateCopy = satDate;
-    const nowIso = now.toISOString();
-
-    // Répondre immédiatement à Twilio (< 5s)
+    const now = new Date().toISOString();
     const response = twiml(`Compris ${state.guardian}, on cherche un remplaçant.`);
 
-    // Envoyer les SMS urgents après avoir retourné la réponse
+    // Arrière-plan: SMS urgents + maj GCal
     (async () => {
       try {
         const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-        const others = USERS.filter((u) => u.phone !== stateCopy.guardianPhone);
+        const others = USERS.filter((u) => u.phone !== state.guardianPhone);
+
         await Promise.all([
           ...others.map((u) =>
             client.messages.create({
               from: process.env.TWILIO_PHONE_NUMBER,
               to: u.phone,
-              body: `URGENT: ${stateCopy.guardian} ne peut pas faire la garde ce weekend. Réponds OUI si tu peux le/la remplacer.`,
+              body: `URGENT: ${state.guardian} ne peut pas faire la garde ce weekend. Réponds OUI si tu peux le/la remplacer.`,
             })
           ),
-          setWeekendState(satDateCopy, {
-            ...stateCopy,
+          setWeekendState(satDate, {
+            ...state,
             status: 'urgent',
-            urgentSentAt: nowIso,
+            urgentSentAt: now,
           }),
         ]);
       } catch (err) {
@@ -86,29 +79,25 @@ export async function POST(request: Request) {
     return response;
   }
 
-  // Quelqu'un répond OUI à l'urgence
+  // Quelqu'un répond OUI à l'urgence → remplaçant trouvé + maj GCal
   if (!isGuardian && rawBody === 'OUI' && sender) {
     if (state.status === 'urgent') {
-      const senderCopy = sender;
-      const stateCopy = { ...state };
-      const satDateCopy = satDate;
-
       const response = twiml(`Merci ${sender.name}! T'es de garde ce weekend. On compte sur toi!`);
 
       (async () => {
         try {
           const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
           await Promise.all([
-            setWeekendState(satDateCopy, {
-              ...stateCopy,
+            setWeekendState(satDate, {
+              ...state,
               status: 'replaced',
-              replacedBy: senderCopy.name,
-              replacedByPhone: senderCopy.phone,
+              replacedBy: sender.name,
+              replacedByPhone: sender.phone,
             }),
             client.messages.create({
               from: process.env.TWILIO_PHONE_NUMBER,
-              to: stateCopy.guardianPhone,
-              body: `${senderCopy.name} a accepté de te remplacer ce weekend. Merci!`,
+              to: state.guardianPhone,
+              body: `${sender.name} a accepté de te remplacer ce weekend. Merci!`,
             }),
           ]);
         } catch (err) {
