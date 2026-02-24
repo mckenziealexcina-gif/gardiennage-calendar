@@ -29,13 +29,17 @@ export async function GET(request: Request) {
       body: `Salut ${guardian.name}, c'est ton tour de gardiennage ce weekend! Réponds OUI ou NON.`,
     });
 
-    await setWeekendState(satDate, {
-      weekendDate: satDate,
-      guardian: guardian.name,
-      guardianPhone: guardian.phone,
-      status: 'pending',
-      sentAt: now.toISOString(),
-    });
+    try {
+      await setWeekendState(satDate, {
+        weekendDate: satDate,
+        guardian: guardian.name,
+        guardianPhone: guardian.phone,
+        status: 'pending',
+        sentAt: now.toISOString(),
+      });
+    } catch (kvErr) {
+      console.warn('KV unavailable, state not saved:', kvErr);
+    }
 
     return NextResponse.json({
       message: `SMS sent to ${guardian.name}`,
