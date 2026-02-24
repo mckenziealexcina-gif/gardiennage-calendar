@@ -1,12 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
-  provider     = "sqlite"
-  url          = env("DATABASE_URL")
-  // For Turso production: change provider to "turso" and add:
-  // directUrl  = env("DATABASE_URL_DIRECT")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // The 4 on-call users in rotation order.
