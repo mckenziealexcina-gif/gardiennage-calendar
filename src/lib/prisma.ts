@@ -1,30 +1,39 @@
-/* eslint-disable */
 import { PrismaClient } from "@prisma/client";
+import { createClient } from "@libsql/client";
+import { PrismaLibSQL } from "@prisma/adapter-libsql";
 
+// Augment the global scope to hold the Prisma client
 declare global {
   // eslint-disable-next-line no-var
-  var prismaGlobal: PrismaClient | undefined;
+  var prisma: PrismaClient | undefined;
 }
 
-function buildClient(): PrismaClient {
-  const url = process.env.DATABASE_URL ?? "";
+const buildPrismaClient = (): PrismaClient => {
+  const isTurso = process.env.DATABASE_URL?.startsWith("libsql:");
 
-  if (url.startsWith("libsql://") || url.startsWith("https://")) {
-    const { PrismaLibSql } = require("@prisma/adapter-libsql") as {
-      PrismaLibSql: new (config: { url: string; authToken?: string }) => object;
-    };
-    const adapter = new PrismaLibSql({
-      url,
+  if (isTurso) {
+    console.log("Connecting to Turso database...");
+    const turso = createClient({
+      url: process.env.DATABASE_URL!,
       authToken: process.env.DATABASE_AUTH_TOKEN,
     });
-    return new PrismaClient({ adapter } as never);
+
+    const adapter = new PrismaLibSQL(turso);
+    return new PrismaClient({ adapter });
   }
 
+  console.log("Connecting to local SQLite database...");
   return new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+    log:
+      process.env.NODE_ENV === "development"
+        ? ["query", "error", "warn"]
+        : ["error"],
   });
+};
+
+// Prevent multiple instances of Prisma Client in development
+export const prisma = global.prisma ?? buildPrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  global.prisma = prisma;
 }
-
-export const prisma = global.prismaGlobal ?? buildClient();
-
-if (process.env.NODE_ENV !== "production") global.prismaGlobal = prisma;
