@@ -32,12 +32,6 @@ export default function RootLayout({
               Gardiennage
             </Link>
             <nav className="flex items-center gap-4">
-              <Link
-                href="/admin"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Administration
-              </Link>
               <ThemeToggle />
             </nav>
           </header>
