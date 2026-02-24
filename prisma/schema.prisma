@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "sqlite"
+  url          = env("DATABASE_URL")
+  // For Turso production: change provider to "turso" and add:
+  // directUrl  = env("DATABASE_URL_DIRECT")
+}
+
+// The 4 on-call users in rotation order.
+// `order` (0-3) defines the circular queue position.
+model User {
+  id        String     @id @default(cuid())
+  name      String
+  phone     String
+  order     Int        @unique
+  createdAt DateTime   @default(now())
+  overrides Override[]
+
+  @@map("users")
+}
+
+// Singleton row (id=1) anchoring the rotation math.
+// seedDate: Saturday of the first rotation week.
+// seedUserOrder: User.order value of who was on duty that weekend.
+model RotationConfig {
+  id            Int      @id @default(1)
+  seedDate      DateTime
+  seedUserOrder Int
+  updatedAt     DateTime @updatedAt
+
+  @@map("rotation_config")
+}
+
+// Manual override for a specific weekend.
+// weekStart: Saturday 00:00 UTC of the overridden weekend.
+model Override {
+  id        String   @id @default(cuid())
+  weekStart DateTime @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@map("overrides")
+}
+
+// Audit log of all email notifications sent.
+model SmsLog {
+  id        String   @id @default(cuid())
+  userId    String
+  userName  String
+  phone     String
+  weekStart DateTime
+  sentAt    DateTime @default(now())
+  status    String
+  messageId String?
+
+  @@map("sms_logs")
+}
