@@ -8,6 +8,11 @@ vi.mock('twilio', () => {
   };
 });
 
+vi.mock('@/lib/kv', () => ({
+  getSaturdayKey: vi.fn().mockReturnValue('weekend:2026-02-28'),
+  setWeekendState: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { GET } from '../route';
 import twilio from 'twilio';
 

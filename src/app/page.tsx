@@ -1,12 +1,27 @@
 import { getNextGuardians } from '@/lib/rotation';
-import { format } from 'date-fns';
+import { getWeekendState } from '@/lib/kv';
+import { format, nextSaturday, isSaturday } from 'date-fns';
 import { frCA } from 'date-fns/locale';
 
-export default function HomePage() {
+export const dynamic = 'force-dynamic';
+
+export default async function HomePage() {
   const schedule = getNextGuardians(13);
   const thisWeekend = schedule[0];
 
-  // Group by month
+  // Lire l'état KV pour ce weekend
+  const now = new Date();
+  const sat = isSaturday(now) ? now : nextSaturday(now);
+  const satDate = format(sat, 'yyyy-MM-dd');
+  const weekendState = await getWeekendState(satDate).catch(() => null);
+
+  // Nom affiché (remplaçant si applicable)
+  const displayName =
+    weekendState?.status === 'replaced' && weekendState.replacedBy
+      ? weekendState.replacedBy
+      : thisWeekend.name;
+
+  // Grouper par mois
   const byMonth: Record<string, typeof schedule> = {};
   for (const entry of schedule) {
     const monthKey = format(entry.friday, 'MMMM yyyy', { locale: frCA });
@@ -24,9 +39,25 @@ export default function HomePage() {
             Ce weekend — vendredi {thisWeekend.dateLabel}
           </p>
           <p className="text-6xl font-black text-white">
-            {thisWeekend.name}
+            {displayName}
           </p>
           <p className="text-blue-200 mt-3 text-sm">est de garde ce weekend</p>
+
+          {weekendState?.status === 'confirmed' && (
+            <span className="mt-4 inline-block bg-green-500/20 text-green-300 text-xs font-semibold px-3 py-1 rounded-full border border-green-500/40">
+              ✓ Confirmé
+            </span>
+          )}
+          {weekendState?.status === 'replaced' && (
+            <span className="mt-4 inline-block bg-orange-500/20 text-orange-300 text-xs font-semibold px-3 py-1 rounded-full border border-orange-500/40">
+              ⚡ Remplacement
+            </span>
+          )}
+          {weekendState?.status === 'urgent' && (
+            <span className="mt-4 inline-block bg-red-500/20 text-red-300 text-xs font-semibold px-3 py-1 rounded-full border border-red-500/40">
+              ⚠ Cherche remplaçant...
+            </span>
+          )}
         </div>
 
         {/* Horaire 3 mois */}
@@ -39,6 +70,11 @@ export default function HomePage() {
               <ul className="space-y-2">
                 {entries.map((entry, i) => {
                   const isThisWeekend = i === 0 && entry === thisWeekend;
+                  const rowName =
+                    isThisWeekend && weekendState?.status === 'replaced' && weekendState.replacedBy
+                      ? weekendState.replacedBy
+                      : entry.name;
+
                   return (
                     <li
                       key={entry.friday.toISOString()}
@@ -56,9 +92,20 @@ export default function HomePage() {
                           Vendredi {entry.dateLabel}
                         </span>
                       </div>
-                      <span className={`font-semibold ${isThisWeekend ? 'text-blue-300' : 'text-gray-100'}`}>
-                        {entry.name}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {isThisWeekend && weekendState?.status === 'confirmed' && (
+                          <span className="text-xs text-green-400">✓</span>
+                        )}
+                        {isThisWeekend && weekendState?.status === 'replaced' && (
+                          <span className="text-xs text-orange-400">⚡</span>
+                        )}
+                        {isThisWeekend && weekendState?.status === 'urgent' && (
+                          <span className="text-xs text-red-400">⚠</span>
+                        )}
+                        <span className={`font-semibold ${isThisWeekend ? 'text-blue-300' : 'text-gray-100'}`}>
+                          {rowName}
+                        </span>
+                      </div>
                     </li>
                   );
                 })}
