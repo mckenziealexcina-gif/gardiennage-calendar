@@ -8,10 +8,10 @@ export interface User {
 
 // NOTE: Replace with actual phone-to-email gateways
 export const USERS: User[] = [
-  { name: 'Alex', email: '1111111111@vmobile.ca' },
-  { name: 'Joey', email: '2222222222@txt.bell.ca' },
-  { name: 'Elo', email: '3333333333@vmobile.ca' },
-  { name: 'Nathan', email: '4444444444@txt.bell.ca' },
+  { name: 'Alex', email: '5817457623@vmobile.ca' },
+  { name: 'Joey', email: '5819903681@vmobile.ca' },
+  { name: 'Elo', email: '4182646318@vmobile.ca' },
+  { name: 'Nathan', email: '5813099142@vmobile.ca' },
 ];
 
 // The anchor date for the rotation calculation.
