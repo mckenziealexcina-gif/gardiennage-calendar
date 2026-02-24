@@ -1,82 +1,55 @@
-import {
-  startOfDay,
-  nextSaturday,
-  isSaturday,
-  differenceInWeeks,
-  addWeeks,
-} from "date-fns";
+import { differenceInWeeks, addWeeks, format } from 'date-fns';
 
-export type RotationUser = {
-  id: string;
+export interface User {
   name: string;
-  phone: string;
-  order: number;
-};
+  email: string; // Phone-to-email gateway
+}
+
+// NOTE: Replace with actual phone-to-email gateways
+export const USERS: User[] = [
+  { name: 'Alex', email: '1111111111@vmobile.ca' },
+  { name: 'Joey', email: '2222222222@txt.bell.ca' },
+  { name: 'Elo', email: '3333333333@vmobile.ca' },
+  { name: 'Nathan', email: '4444444444@txt.bell.ca' },
+];
+
+// The anchor date for the rotation calculation.
+// This should be the Friday of the week when the first user in the list (Alex) is on call.
+const START_DATE = new Date(process.env.START_DATE || '2026-02-27T12:00:00Z');
 
 /**
- * Returns the Saturday of the weekend that contains or immediately follows `date`.
- * Saturday is the canonical "start" of a duty weekend.
+ * Gets the guardian for a given date.
+ * The rotation is calculated mathematically based on the weeks elapsed since a fixed start date.
+ * @param date The date to check. Defaults to now.
+ * @returns The User who is the guardian for that week.
  */
-export function getWeekSaturday(date: Date): Date {
-  const d = startOfDay(date);
-  return isSaturday(d) ? d : nextSaturday(d);
+export function getCurrentGuardian(date: Date = new Date()): User {
+  const weeksDiff = differenceInWeeks(date, START_DATE);
+  const userIndex = weeksDiff % USERS.length;
+  // Ensure the index is not negative for dates before START_DATE
+  const adjustedIndex = (userIndex + USERS.length) % USERS.length;
+  return USERS[adjustedIndex];
 }
 
 /**
- * Pure mathematical rotation resolver — no DB access.
- *
- * Algorithm:
- *   weekIndex      = differenceInWeeks(targetSaturday, seedSaturday)
- *   userOrderIndex = ((seedUserOrder + weekIndex) % n + n) % n
- *
- * @param targetDate    Any date; resolves to the containing weekend's Saturday
- * @param seedDate      The Saturday anchor from RotationConfig
- * @param seedUserOrder The User.order value on duty at seedDate
- * @param users         All users sorted by order ASC
+ * Gets the schedule for the next N weekends.
+ * @param count The number of upcoming weekends to get the schedule for.
+ * @returns An array of objects containing the weekend date and the guardian's name.
  */
-export function resolveUserForWeekend(
-  targetDate: Date,
-  seedDate: Date,
-  seedUserOrder: number,
-  users: RotationUser[]
-): RotationUser {
-  const targetSaturday = getWeekSaturday(targetDate);
-  const seedSaturday = startOfDay(seedDate);
-
-  const weekIndex = differenceInWeeks(targetSaturday, seedSaturday);
-  const n = users.length;
-  const rawIndex = (seedUserOrder + weekIndex) % n;
-  const userOrderIndex = ((rawIndex % n) + n) % n;
-
-  const user = users.find((u) => u.order === userOrderIndex);
-  if (!user) throw new Error(`No user found for order index ${userOrderIndex}`);
-  return user;
-}
-
-/**
- * Returns `count` weekends starting from (and including) `fromDate`'s weekend.
- * Does NOT resolve overrides — that is the caller's responsibility.
- */
-export function getUpcomingWeekends(
-  fromDate: Date,
-  count: number,
-  seedDate: Date,
-  seedUserOrder: number,
-  users: RotationUser[]
-): Array<{ weekStart: Date; user: RotationUser }> {
-  const firstSaturday = getWeekSaturday(fromDate);
-  const results: Array<{ weekStart: Date; user: RotationUser }> = [];
+export function getNextGuardians(count: number = 4) {
+  const today = new Date();
+  const schedule = [];
 
   for (let i = 0; i < count; i++) {
-    const saturday = addWeeks(firstSaturday, i);
-    const user = resolveUserForWeekend(
-      saturday,
-      seedDate,
-      seedUserOrder,
-      users
-    );
-    results.push({ weekStart: saturday, user });
+    const upcomingDate = addWeeks(today, i);
+    const guardian = getCurrentGuardian(upcomingDate);
+    // You might want to format the date to show the specific weekend
+    const weekendDate = format(upcomingDate, 'MMMM d, yyyy');
+    schedule.push({
+      date: weekendDate,
+      name: guardian.name,
+    });
   }
 
-  return results;
+  return schedule;
 }
