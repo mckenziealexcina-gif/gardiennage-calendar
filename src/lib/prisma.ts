@@ -1,31 +1,44 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
 
-function createPrismaClient() {
+/* eslint-disable */
+let _prisma: any;
+
+function getPrisma(): PrismaClient {
+  if (_prisma) return _prisma;
+
   const url = process.env.DATABASE_URL ?? "";
 
-  // Use libsql driver adapter for Turso URLs
   if (url.startsWith("libsql://") || url.startsWith("https://")) {
+    // Loaded lazily so the module isn't evaluated at build time
+    const { PrismaLibSql } = require("@prisma/adapter-libsql");
     const adapter = new PrismaLibSql({
       url,
       authToken: process.env.DATABASE_AUTH_TOKEN,
     });
-    return new PrismaClient({ adapter } as never);
+    _prisma = new PrismaClient({ adapter });
+  } else {
+    _prisma = new PrismaClient({
+      log:
+        process.env.NODE_ENV === "development"
+          ? ["query", "error", "warn"]
+          : ["error"],
+    });
   }
 
-  // Local SQLite — standard client
-  return new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
-        : ["error"],
-  });
+  return _prisma;
 }
+/* eslint-enable */
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = globalForPrisma.prisma ?? getPrisma();
+    if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
+    // eslint-disable-next-line
+    const value = (client as any)[prop];
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
