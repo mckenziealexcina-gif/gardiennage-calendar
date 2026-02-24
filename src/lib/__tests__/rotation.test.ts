@@ -57,9 +57,9 @@ describe('getCurrentGuardian — tests unitaires', () => {
 });
 
 describe('getNextGuardians — tests unitaires', () => {
-  it('retourne exactement 4 entrées par défaut', () => {
-    const result = getNextGuardians(4);
-    expect(result).toHaveLength(4);
+  it('retourne 13 entrées par défaut (3 mois)', () => {
+    const result = getNextGuardians();
+    expect(result).toHaveLength(13);
   });
 
   it('retourne le bon nombre si on passe un count custom', () => {
@@ -67,13 +67,27 @@ describe('getNextGuardians — tests unitaires', () => {
     expect(getNextGuardians(8)).toHaveLength(8);
   });
 
-  it('chaque entrée a un champ name et date', () => {
+  it('chaque entrée a un champ name, friday (Date) et dateLabel (string)', () => {
     const result = getNextGuardians(4);
     for (const entry of result) {
       expect(entry).toHaveProperty('name');
-      expect(entry).toHaveProperty('date');
+      expect(entry).toHaveProperty('friday');
+      expect(entry).toHaveProperty('dateLabel');
       expect(typeof entry.name).toBe('string');
-      expect(typeof entry.date).toBe('string');
+      expect(entry.friday).toBeInstanceOf(Date);
+      expect(typeof entry.dateLabel).toBe('string');
+    }
+  });
+
+  it('le premier entry.friday est un vendredi (getDay() === 5)', () => {
+    const result = getNextGuardians(1);
+    expect(result[0].friday.getDay()).toBe(5);
+  });
+
+  it('tous les fridays sont des vendredis', () => {
+    const result = getNextGuardians(13);
+    for (const entry of result) {
+      expect(entry.friday.getDay()).toBe(5);
     }
   });
 

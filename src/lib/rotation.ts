@@ -1,4 +1,5 @@
-import { differenceInWeeks, addWeeks, format } from 'date-fns';
+import { differenceInWeeks, addWeeks, format, nextFriday, isFriday } from 'date-fns';
+import { frCA } from 'date-fns/locale';
 
 export interface User {
   name: string;
@@ -32,21 +33,27 @@ export function getCurrentGuardian(date: Date = new Date()): User {
 }
 
 /**
- * Gets the schedule for the next N weekends.
- * @param count The number of upcoming weekends to get the schedule for.
- * @returns An array of objects containing the weekend date and the guardian's name.
+ * Gets the upcoming Friday date (this Friday if today is Friday, otherwise next Friday).
  */
-export function getNextGuardians(count: number = 4) {
-  const today = new Date();
+function getUpcomingFriday(from: Date = new Date()): Date {
+  return isFriday(from) ? from : nextFriday(from);
+}
+
+/**
+ * Gets the schedule for the next N weekends, anchored on Fridays.
+ * @param count The number of upcoming weekends to get the schedule for.
+ * @returns An array of objects containing the Friday date and the guardian's name.
+ */
+export function getNextGuardians(count: number = 13) {
+  const firstFriday = getUpcomingFriday();
   const schedule = [];
 
   for (let i = 0; i < count; i++) {
-    const upcomingDate = addWeeks(today, i);
-    const guardian = getCurrentGuardian(upcomingDate);
-    // You might want to format the date to show the specific weekend
-    const weekendDate = format(upcomingDate, 'MMMM d, yyyy');
+    const friday = addWeeks(firstFriday, i);
+    const guardian = getCurrentGuardian(friday);
     schedule.push({
-      date: weekendDate,
+      friday,
+      dateLabel: format(friday, "d MMM", { locale: frCA }),
       name: guardian.name,
     });
   }
