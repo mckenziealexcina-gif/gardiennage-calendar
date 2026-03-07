@@ -103,40 +103,46 @@ export async function getWeekendState(satDate: string): Promise<WeekendState | n
   );
 }
 
-// Créer ou mettre à jour l'event du weekend dans GCal
+// Créer ou mettre à jour les events sam+dim dans GCal
 export async function setWeekendState(satDate: string, state: WeekendState): Promise<void> {
   const calendar = getCalendar();
-  const sat = new Date(satDate + 'T00:00:00');
-  const sun = addDays(sat, 1);
+  const sunDate = format(addDays(new Date(satDate + 'T00:00:00'), 1), 'yyyy-MM-dd');
+  const color = statusToColorId(state.status);
+  const description = JSON.stringify({
+    weekendDate: state.weekendDate,
+    sentAt: state.sentAt,
+    urgentSentAt: state.urgentSentAt,
+    replacedBy: state.replacedBy,
+    replacedByPhone: state.replacedByPhone,
+  });
+  const summary = buildTitle(state.guardian, state.status);
 
-  const eventBody = {
-    summary: buildTitle(state.guardian, state.status),
-    description: JSON.stringify({
-      weekendDate: state.weekendDate,
-      sentAt: state.sentAt,
-      urgentSentAt: state.urgentSentAt,
-      replacedBy: state.replacedBy,
-      replacedByPhone: state.replacedByPhone,
-    }),
-    start: { date: satDate },
-    end: { date: format(sun, 'yyyy-MM-dd') },
-    colorId: statusToColorId(state.status),
-  };
+  // Trouver tous les events Gardiennage du weekend (sam + dim)
+  const res = await calendar.events.list({
+    calendarId: process.env.GOOGLE_CALENDAR_ID,
+    timeMin: new Date(satDate + 'T00:00:00').toISOString(),
+    timeMax: new Date(sunDate + 'T23:59:59').toISOString(),
+    q: 'Gardiennage:',
+    singleEvents: true,
+  });
 
-  if (state.eventId) {
-    // Mettre à jour l'event existant
-    await calendar.events.update({
+  const events = res.data.items ?? [];
+
+  await Promise.all(events.map((event) => {
+    const issat = event.start?.dateTime?.startsWith(satDate) || event.start?.date === satDate;
+    const startDate = issat ? satDate : sunDate;
+    return calendar.events.update({
       calendarId: process.env.GOOGLE_CALENDAR_ID,
-      eventId: state.eventId,
-      requestBody: eventBody,
+      eventId: event.id!,
+      requestBody: {
+        summary,
+        description,
+        start: { dateTime: `${startDate}T08:30:00`, timeZone: 'America/Toronto' },
+        end:   { dateTime: `${startDate}T17:00:00`, timeZone: 'America/Toronto' },
+        colorId: color,
+      },
     });
-  } else {
-    // Créer un nouvel event
-    await calendar.events.insert({
-      calendarId: process.env.GOOGLE_CALENDAR_ID,
-      requestBody: eventBody,
-    });
-  }
+  }));
 }
 
 // Créer l'event initial (depuis le cron du vendredi)
