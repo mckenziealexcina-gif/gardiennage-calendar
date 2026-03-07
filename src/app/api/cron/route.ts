@@ -22,10 +22,12 @@ export async function GET(request: Request) {
       });
     }
 
-    // Calculer le gardien selon la rotation pure (vendredi = samedi-1)
-    // On utilise USERS avec rotation basée sur la semaine courante
-    // TEST: forcer Alex pour vérifier Google Calendar + SMS
-    const guardian = USERS[0]; // Alex
+    // Calculer le gardien selon la rotation pure
+    const startDate = new Date(process.env.START_DATE ?? '2026-02-27');
+    const satMs = new Date(satDate).getTime();
+    const weekIndex = Math.round((satMs - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    const userIndex = ((weekIndex % 4) + 4) % 4;
+    const guardian = USERS[userIndex];
 
     // Créer l'event dans Google Calendar
     const state = await createWeekendEvent(satDate, guardian.name);
