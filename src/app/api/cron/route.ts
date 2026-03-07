@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import twilio from 'twilio';
 import { getSaturdayKey, createWeekendEvent, getWeekendState, USERS } from '@/lib/google';
-import { format, nextFriday, isFriday } from 'date-fns';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -25,13 +24,8 @@ export async function GET(request: Request) {
 
     // Calculer le gardien selon la rotation pure (vendredi = samedi-1)
     // On utilise USERS avec rotation basée sur la semaine courante
-    const startDate = new Date(process.env.START_DATE ?? '2026-02-27');
-    const fridayDate = isFriday(now) ? now : nextFriday(now);
-    const weekIndex = Math.round(
-      (fridayDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)
-    );
-    const userIndex = ((weekIndex % 4) + 4) % 4;
-    const guardian = USERS[userIndex];
+    // TEST: forcer Alex pour vérifier Google Calendar + SMS
+    const guardian = USERS[0]; // Alex
 
     // Créer l'event dans Google Calendar
     const state = await createWeekendEvent(satDate, guardian.name);
