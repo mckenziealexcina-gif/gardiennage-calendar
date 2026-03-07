@@ -142,21 +142,34 @@ export async function setWeekendState(satDate: string, state: WeekendState): Pro
 // Créer l'event initial (depuis le cron du vendredi)
 export async function createWeekendEvent(satDate: string, guardian: string): Promise<WeekendState> {
   const calendar = getCalendar();
-  const sat = new Date(satDate + 'T00:00:00');
-  const sun = addDays(sat, 1);
+  const sun = addDays(new Date(satDate + 'T00:00:00'), 1);
+  const sunDate = format(sun, 'yyyy-MM-dd');
   const user = USERS.find((u) => u.name === guardian)!;
   const now = new Date().toISOString();
 
-  const res = await calendar.events.insert({
-    calendarId: process.env.GOOGLE_CALENDAR_ID,
-    requestBody: {
-      summary: buildTitle(guardian, 'pending'),
-      description: JSON.stringify({ weekendDate: satDate, sentAt: now }),
-      start: { date: satDate },
-      end: { date: format(sun, 'yyyy-MM-dd') },
-      colorId: statusToColorId('pending'),
-    },
-  });
+  // Créer 2 events: samedi 8h30-17h00 et dimanche 8h30-17h00 (America/Toronto)
+  const [resSat, _resSun] = await Promise.all([
+    calendar.events.insert({
+      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      requestBody: {
+        summary: buildTitle(guardian, 'pending'),
+        description: JSON.stringify({ weekendDate: satDate, sentAt: now }),
+        start: { dateTime: `${satDate}T08:30:00`, timeZone: 'America/Toronto' },
+        end:   { dateTime: `${satDate}T17:00:00`, timeZone: 'America/Toronto' },
+        colorId: statusToColorId('pending'),
+      },
+    }),
+    calendar.events.insert({
+      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      requestBody: {
+        summary: buildTitle(guardian, 'pending'),
+        description: JSON.stringify({ weekendDate: satDate, sentAt: now }),
+        start: { dateTime: `${sunDate}T08:30:00`, timeZone: 'America/Toronto' },
+        end:   { dateTime: `${sunDate}T17:00:00`, timeZone: 'America/Toronto' },
+        colorId: statusToColorId('pending'),
+      },
+    }),
+  ]);
 
   return {
     weekendDate: satDate,
@@ -164,7 +177,7 @@ export async function createWeekendEvent(satDate: string, guardian: string): Pro
     guardianPhone: user.phone,
     status: 'pending',
     sentAt: now,
-    eventId: res.data.id ?? '',
+    eventId: resSat.data.id ?? '',
   };
 }
 
