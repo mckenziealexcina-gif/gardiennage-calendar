@@ -191,11 +191,11 @@ export function getSaturdayKey(from: Date = new Date()): string {
 function statusToColorId(status: WeekendState['status']): string {
   switch (status) {
     case 'confirmed': return '2';  // Vert sauge
-    case 'replaced':  return '6';  // Tangerine/orange
+    case 'replaced':  return '2';  // Vert sauge
     case 'urgent':
     case 'declined':  return '11'; // Tomate/rouge
     case 'pending':
-    default:          return '9';  // Myrtille/bleu
+    default:          return '5';  // Banane/jaune
   }
 }
 
