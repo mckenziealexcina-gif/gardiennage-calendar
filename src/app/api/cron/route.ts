@@ -23,7 +23,8 @@ export async function GET(request: Request) {
     }
 
     // Calculer le gardien selon la rotation pure
-    const startDate = new Date(process.env.START_DATE ?? '2026-02-27');
+    // START_DATE = samedi 28 fév 2026 (semaine 0 = Alex)
+    const startDate = new Date(process.env.START_DATE ?? '2026-02-28');
     const satMs = new Date(satDate).getTime();
     const weekIndex = Math.round((satMs - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
     const userIndex = ((weekIndex % 4) + 4) % 4;
