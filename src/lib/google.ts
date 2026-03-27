@@ -15,11 +15,13 @@ export interface WeekendState {
 }
 
 // Mapping nom → téléphone
+// Ordre de rotation : Alex(0) → Nathan(1) → Joey(2) → Elo(3)
+// Ancre : samedi 21 mars 2026 = semaine 0 (Alex)
 export const USERS: { name: string; phone: string }[] = [
   { name: 'Alex',   phone: '+15817457623' },
+  { name: 'Nathan', phone: '+15813099142' },
   { name: 'Joey',   phone: '+15819903681' },
   { name: 'Elo',    phone: '+14182646318' },
-  { name: 'Nathan', phone: '+15813099142' },
 ];
 
 function getAuth() {
