@@ -105,6 +105,33 @@ export async function getWeekendState(satDate: string): Promise<WeekendState | n
   );
 }
 
+// Supprimer tous les events Gardiennage d'un weekend (sam + dim)
+export async function deleteWeekendEvents(satDate: string): Promise<number> {
+  const calendar = getCalendar();
+  const sunDate = format(addDays(new Date(satDate + 'T00:00:00'), 1), 'yyyy-MM-dd');
+
+  const res = await calendar.events.list({
+    calendarId: process.env.GOOGLE_CALENDAR_ID,
+    timeMin: new Date(satDate + 'T00:00:00').toISOString(),
+    timeMax: new Date(sunDate + 'T23:59:59').toISOString(),
+    q: 'Gardiennage:',
+    singleEvents: true,
+  });
+
+  const events = res.data.items ?? [];
+  await Promise.all(
+    events.map((ev) =>
+      calendar.events.delete({
+        calendarId: process.env.GOOGLE_CALENDAR_ID!,
+        eventId: ev.id!,
+      })
+    )
+  );
+
+  console.log(`[GCal] Supprimé ${events.length} event(s) pour ${satDate}`);
+  return events.length;
+}
+
 // Créer ou mettre à jour les events sam+dim dans GCal
 export async function setWeekendState(satDate: string, state: WeekendState): Promise<void> {
   const calendar = getCalendar();
