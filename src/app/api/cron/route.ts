@@ -23,9 +23,16 @@ function computeGuardian(satDate: string) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const cronSecret = searchParams.get('cron_secret');
 
-  if (cronSecret !== process.env.CRON_SECRET) {
+  // Vercel auto-cron → Authorization: Bearer <CRON_SECRET>
+  // Déclenchement manuel → ?cron_secret=<CRON_SECRET>
+  const bearerToken = request.headers.get('authorization')?.replace('Bearer ', '');
+  const querySecret = searchParams.get('cron_secret');
+  const isAuthorized =
+    bearerToken === process.env.CRON_SECRET ||
+    querySecret === process.env.CRON_SECRET;
+
+  if (!isAuthorized) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
@@ -73,11 +80,26 @@ export async function GET(request: Request) {
       process.env.TWILIO_AUTH_TOKEN
     );
 
-    await client.messages.create({
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: guardian.phone,
-      body: `Salut ${guardian.name}, c'est ton tour de gardiennage ce weekend! Réponds OUI ou NON.`,
-    });
+    try {
+      await client.messages.create({
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: guardian.phone,
+        body: `Salut ${guardian.name}, c'est ton tour de gardiennage ce weekend! Réponds OUI ou NON.`,
+      });
+    } catch (smsError) {
+      console.error('[CRON] SMS Twilio FAILED:', smsError);
+      await notifyDiscord(
+        `🚨 **Cron gardiennage — SMS NON envoyé**\n` +
+        `Event GCal créé pour **${guardian.name}** (${satDate}) mais le SMS Twilio a planté.\n` +
+        `Erreur: \`${String(smsError).slice(0, 300)}\`\n` +
+        `→ Vérifie le TWILIO_AUTH_TOKEN sur Vercel.`
+      );
+      return NextResponse.json({
+        message: `Event créé pour ${guardian.name} mais SMS échoué — notif Discord envoyée`,
+        eventId: state.eventId,
+        smsError: String(smsError),
+      }, { status: 500 });
+    }
 
     return NextResponse.json({
       message: `SMS envoyé à ${guardian.name} pour ${satDate}`,
@@ -86,9 +108,28 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Cron job error:', error);
+    await notifyDiscord(
+      `🚨 **Cron gardiennage — ERREUR FATALE**\n` +
+      `Le cron a planté avant de pouvoir créer l'event ou envoyer le SMS.\n` +
+      `Erreur: \`${String(error).slice(0, 300)}\``
+    );
     return NextResponse.json(
       { message: 'Error', error: String(error) },
       { status: 500 }
     );
+  }
+}
+
+async function notifyDiscord(content: string): Promise<void> {
+  const url = process.env.DISCORD_WEBHOOK_URL?.trim();
+  if (!url) return;
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+  } catch (e) {
+    console.error('[CRON] Discord notify failed:', e);
   }
 }

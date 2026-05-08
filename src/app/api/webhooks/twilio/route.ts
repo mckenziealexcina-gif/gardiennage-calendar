@@ -1,7 +1,18 @@
 import twilio from 'twilio';
 import { USERS, getWeekendState, setWeekendState, getSaturdayKey } from '@/lib/google';
+import { addDays, format } from 'date-fns';
+import { frCA } from 'date-fns/locale';
 
 export const runtime = 'nodejs';
+
+function formatWeekend(satDate: string): string {
+  const sat = new Date(satDate + 'T12:00:00');
+  const sun = addDays(sat, 1);
+  const day1 = format(sat, 'd');
+  const day2 = format(sun, 'd');
+  const monthYear = format(sun, 'MMMM yyyy', { locale: frCA });
+  return `${day1}-${day2} ${monthYear}`;
+}
 
 function twiml(message: string): Response {
   return new Response(
@@ -40,9 +51,22 @@ export async function POST(request: Request) {
 
   const isGuardian = sender?.phone === state.guardianPhone;
 
-  // Gardien répond OUI → confirmer dans GCal
+  // Gardien répond OUI → confirmer dans GCal + notif Discord
   if (isGuardian && rawBody === 'OUI') {
     await setWeekendState(satDate, { ...state, status: 'confirmed' });
+
+    // Notif Discord
+    const discordUrl = process.env.DISCORD_WEBHOOK_URL?.trim();
+    if (discordUrl) {
+      fetch(discordUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: `📋 **Gardiennage · Weekend du ${formatWeekend(satDate)}**\n✅ **${state.guardian}** a confirmé sa présence. La garde est assurée.`,
+        }),
+      }).catch((e) => console.error('[Discord] notify failed:', e));
+    }
+
     return twiml(`Parfait, merci ${state.guardian}! On compte sur toi ce weekend.`);
   }
 
