@@ -55,16 +55,20 @@ export async function POST(request: Request) {
   if (isGuardian && rawBody === 'OUI') {
     await setWeekendState(satDate, { ...state, status: 'confirmed' });
 
-    // Notif Discord
+    // Notif Discord — await sinon la lambda Vercel termine avant que fetch parte
     const discordUrl = process.env.DISCORD_WEBHOOK_URL?.trim();
     if (discordUrl) {
-      fetch(discordUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: `📋 **Gardiennage · Weekend du ${formatWeekend(satDate)}**\n✅ **${state.guardian}** a confirmé sa présence. La garde est assurée.`,
-        }),
-      }).catch((e) => console.error('[Discord] notify failed:', e));
+      try {
+        await fetch(discordUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: `📋 **Gardiennage · Weekend du ${formatWeekend(satDate)}**\n✅ **${state.guardian}** a confirmé sa présence. La garde est assurée.`,
+          }),
+        });
+      } catch (e) {
+        console.error('[Discord] notify failed:', e);
+      }
     }
 
     return twiml(`Parfait, merci ${state.guardian}! On compte sur toi ce weekend.`);
